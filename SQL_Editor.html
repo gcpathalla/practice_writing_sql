@@ -1,0 +1,2394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SQL Browser — Debuggable</title>
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+
+<style>
+:root{
+  --bg:#2b2b2b;
+  --sidebar:#252526;
+  --header:#333333;
+  --text:#e0e0e0;
+  --muted:#9aa0a6;
+  --border:#444444;
+  --hover:#3c3f41;
+  --primary:#0078d7;
+  --success:#4caf50;
+  --code:#1e1e1e;
+  --tableHead:#323232;
+  --tabInactive:#1d1d1d; /* darker than active/header */
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:Segoe UI,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  height:100vh;
+  display:flex;
+  overflow:hidden;
+}
+
+/* Loading overlay */
+#loadingOverlay{
+  position:fixed;
+  inset:0;
+  background:#1e1e1e;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:2000;
+}
+.loading-content{
+  text-align:center;
+  color:var(--muted);
+  font-size:14px;
+}
+.loading-spinner{
+  width:36px;
+  height:36px;
+  border-radius:50%;
+  border:4px solid rgba(255,255,255,0.1);
+  border-top-color:var(--primary);
+  margin:0 auto 10px auto;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{
+  to{transform:rotate(360deg)}
+}
+
+/* Sidebar */
+.sidebar{
+  width:300px;
+  background:var(--sidebar);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+}
+.load-top{
+  padding:12px;
+  border-bottom:1px solid var(--border);
+}
+.db-actions{display:flex;gap:8px;margin-bottom:0}
+
+/* Buttons */
+.btn{
+  padding:8px 10px;
+  border-radius:4px;
+  border:none;
+  background:var(--primary);
+  color:white;
+  cursor:pointer;
+  font-size:13px;
+  width:auto;
+}
+.btn-full{width:100%}
+.btn.secondary{
+  background:#272727;
+  border:1px solid var(--border);
+  color:var(--text);
+}
+.btn:disabled{
+  opacity:0.5;
+  cursor:default;
+}
+
+/* Small icon buttons in DB rows */
+.db-icon-btn{
+  background:transparent;
+  border:none;
+  padding:4px;
+  cursor:pointer;
+  color:var(--muted);
+}
+.db-icon-btn:hover{color:var(--text)}
+
+/* Error message */
+.error-message{
+  background:rgba(244,67,54,0.06);
+  color:#f44336;
+  padding:8px;
+  border-left:3px solid #f44336;
+  margin-top:8px;
+  border-radius:4px;
+  display:none;
+  font-size:13px;
+}
+
+/* DB select & list */
+.databases-block{
+  padding:10px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.databases-block label{
+  color:var(--muted);
+  font-size:13px;
+  margin-right:6px;
+}
+.databases-block select{
+  flex:1;
+  padding:8px;
+  background:var(--bg);
+  color:var(--text);
+  border-radius:4px;
+  border:1px solid var(--border);
+}
+
+/* Expand columns option */
+.options-block{
+  padding:6px 10px;
+  border-bottom:1px solid var(--border);
+  font-size:12px;
+  color:var(--muted);
+}
+.options-block label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.options-block input[type="checkbox"]{
+  width:14px;
+  height:14px;
+}
+
+/* Table list */
+.table-list{
+  flex:1;
+  overflow:auto;
+  padding:8px;
+}
+.db-node{
+  padding:8px 10px;
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  cursor:pointer;
+  gap:8px;
+}
+.db-node:hover{background:var(--hover)}
+.db-left{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:1;
+}
+.db-name{font-weight:600}
+.db-meta{font-size:12px;color:var(--muted)}
+.db-row-actions{
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+.tables-children{
+  margin-left:22px;
+  margin-top:6px;
+  margin-bottom:8px;
+}
+.table-item{
+  padding:6px 10px;
+  border-radius:6px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.table-item:hover{background:var(--hover)}
+.table-item i{
+  width:16px;
+  text-align:center;
+  color:var(--primary);
+}
+.no-tables{padding:12px;color:var(--muted)}
+
+/* Main layout */
+.main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+/* Tabs bar */
+.tabs-bar{
+  /*background:var(--header);*/
+  padding:4px 8px 0 8px;
+  /*border-bottom:1px solid var(--border);*/
+  display:flex;
+  align-items:stretch;
+  gap:8px;
+}
+.tabs-left{
+  display:flex;
+  align-items:flex-end;
+  gap:4px;
+  flex:1;
+  overflow-x:auto;
+}
+.tabs-right{
+  display:flex;
+  align-items:flex-end;
+  gap:8px;
+}
+
+/* Tabs */
+.tab{
+  padding:6px 10px;
+  border-radius:6px 6px 0 0;
+  background:var(--tabInactive);
+  border:1px solid var(--border);
+  border-bottom:none;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  cursor:pointer;
+  font-size:13px;
+  max-width:180px;
+  white-space:nowrap;
+}
+.tab.active{
+  background:var(--header);
+  border-color:var(--border);
+  border-bottom-color:var(--header);
+}
+.tab-title{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  color:#777777;               /* inactive tab title color */
+}
+.tab.active .tab-title{
+  color:#ffffff;               /* active tab title color */
+  font-weight:600;
+}
+.tab-close{
+  font-size:13px;
+  opacity:0.85;
+  padding:0 2px;
+}
+.tab-close:hover{opacity:1}
+.tab-dirty-dot{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#ffffff;
+  flex-shrink:0;
+}
+
+/* Right-side buttons styled as separate buttons */
+.tab-control-btn{
+  border-radius:4px;
+  border:1px solid var(--border);
+  background:#3a3a3a;
+  display:flex;
+  align-items:center;
+  gap:4px;
+  margin-bottom:6px; /* clear separation from bar below */
+}
+
+/* Tab main area */
+.tab-main-area{
+  display:flex;
+  flex-direction:column;
+  flex:1;
+  min-height:0;
+}
+
+/* Toolbar */
+.toolbar{
+  background:var(--header);
+  padding:8px 12px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.toolbar select{
+  padding:6px;
+  background:var(--bg);
+  color:var(--text);
+  border-radius:4px;
+  border:1px solid var(--border);
+}
+#queryNameDisplay{
+  font-size:13px;
+  color:var(--muted);
+}
+
+/* Split layout */
+.split-container{
+  display:flex;
+  flex-direction:column;
+  flex:1;
+  min-height:0;
+}
+
+/* Editor */
+.editor-area{
+  background:var(--code);
+  border:1px solid var(--border);
+  border-radius:6px;
+  margin:12px;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  min-height:80px;
+}
+.editor-wrapper{
+  flex:0 0 auto;
+  overflow:hidden;
+}
+.CodeMirror{height:100%!important;background:var(--code)}
+
+/* Splitter */
+.splitter{
+  height:8px;
+  background:transparent;
+  cursor:row-resize;
+  margin:0 12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.splitter:before{
+  content:"";
+  width:36px;
+  height:4px;
+  border-radius:2px;
+  background:var(--border);
+  opacity:0.6;
+}
+
+/* Results panel */
+.results-area{
+  flex:1;
+  margin:0 12px 12px 12px;
+  background:var(--code);
+  border:1px solid var(--border);
+  border-radius:6px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  min-height:60px;
+}
+
+/* Fixed header inside results */
+.results-header{
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  margin:0;
+  padding:8px;
+  gap:8px;
+  position:sticky;
+  top:0;
+  z-index:5;
+  background:var(--code);
+  border-bottom:1px solid var(--border);
+}
+
+/* Scrollable results area */
+.results-scroll{
+  flex:1;
+  overflow:auto;
+  padding:0 8px 8px 8px;
+}
+
+/* Controls in header */
+.results-controls{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  color:var(--muted);
+  font-size:13px;
+}
+.results-controls label{
+  font-size:12px;
+  color:var(--muted);
+  margin-right:6px;
+}
+.results-controls input{
+  width:68px;
+  padding:4px;
+  border-radius:4px;
+  border:1px solid var(--border);
+  background:var(--bg);
+  color:var(--text);
+  text-align:center;
+}
+
+/* Results table */
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+  table-layout:auto;
+  position:relative;
+}
+th, td{
+  padding:8px;
+  border-bottom:1px solid var(--border);
+  border-right:1px solid var(--border);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+th:last-child, td:last-child{border-right:none}
+th{
+  background:var(--tableHead);
+  position:sticky;
+  top:0;
+  z-index:2;
+  text-align:left;
+}
+tr:nth-child(even){background:rgba(0,0,0,0.03)}
+td{font-family:monospace}
+
+/* Status bar */
+.status-bar{
+  background:var(--header);
+  padding:6px 12px;
+  border-top:1px solid var(--border);
+  display:flex;
+  justify-content:space-between;
+  font-size:13px;
+  color:var(--muted);
+}
+
+/* Saved queries modal */
+#savedQueriesModal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:1500;
+}
+.saved-modal-content{
+  background:var(--sidebar);
+  border-radius:8px;
+  padding:12px;
+  width:520px;
+  max-height:70vh;
+  display:flex;
+  flex-direction:column;
+  border:1px solid var(--border);
+}
+.saved-modal-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:8px;
+}
+.saved-modal-title{
+  font-weight:600;
+}
+.saved-modal-body{
+  flex:1;
+  overflow:auto;
+  font-size:14px;
+  min-height:220px;  /* about 6 rows worth */
+  max-height:320px;  /* starts scrolling after ~10 rows */
+}
+.saved-modal-footer{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:10px;
+}
+.saved-list-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:6px 2px;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+  cursor:pointer;
+}
+.saved-list-main{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.saved-list-name{
+  font-weight:500;
+  font-size:14px;
+}
+.saved-list-db{
+  font-size:12px;
+  color:var(--muted);
+}
+.saved-list-actions{
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+.saved-q-checkbox{
+  width:16px;
+  height:16px;
+  accent-color:var(--success); /* green tick */
+}
+.saved-selected{
+  background:rgba(76,175,80,0.12); /* light greenish background */
+  border-radius:4px;
+}
+
+/* Generic small button in modal */
+.btn-small{
+  padding:4px 8px;
+  font-size:12px;
+}
+
+/* Responsive */
+@media (max-width:800px){
+  .sidebar{width:200px}
+}
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay">
+  <div class="loading-content">
+    <div class="loading-spinner"></div>
+    <div>Loading SQL Browser...</div>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="load-top">
+    <div class="db-actions">
+      <button id="btnPickFiles" class="btn btn-full">Load databases</button>
+    </div>
+    <div id="loadError" class="error-message"></div>
+  </div>
+
+  <div class="databases-block">
+    <label for="databaseSelect">Databases</label>
+    <select id="databaseSelect">
+      <option value="">Select a database</option>
+    </select>
+  </div>
+
+  <div class="options-block">
+    <label>
+      <input type="checkbox" id="expandColumnsToggle">
+      Expand columns in SELECT
+    </label>
+  </div>
+
+  <div class="table-list" id="tableList">
+    <div style="padding:15px;color:var(--muted)">
+      <i class="fas fa-database"></i> No database loaded
+    </div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Tabs bar -->
+  <div class="tabs-bar">
+    <div class="tabs-left" id="tabsLeft"></div>
+    <div class="tabs-right">
+      <button id="newTabButton" class="btn secondary tab-control-btn">+ New query</button>
+      <button id="openSavedButton" class="btn secondary tab-control-btn">Open saved</button>
+      <button id="saveAllButton" class="btn secondary tab-control-btn">Save all</button>
+    </div>
+  </div>
+
+  <!-- Per-tab content -->
+  <div class="tab-main-area" id="tabMainArea">
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <label style="color:var(--muted)">DB</label>
+      <select id="toolbarDatabaseSelect">
+        <option value="">(select DB)</option>
+      </select>
+
+      <button id="runQuery" class="btn"><i class="fas fa-play"></i> Run</button>
+      <button id="saveQuery" class="btn secondary"><i class="fas fa-save"></i> Save</button>
+      <button id="downloadQuery" class="btn secondary"><i class="fas fa-download"></i> Download</button>
+      <button id="formatQuery" class="btn secondary"><i class="fas fa-indent"></i> Format</button>
+      <button id="clearQuery" class="btn secondary"><i class="fas fa-trash"></i> Clear</button>
+
+      <label style="color:var(--muted);margin-left:8px">Default max rows</label>
+      <input id="defaultMaxRows" type="number" min="1" placeholder="100"
+        style="width:90px;padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)"/>
+
+      <div style="flex:1"></div>
+
+      <span id="queryNameDisplay">Query: (unnamed)</span>
+
+      <div id="connectionStatus" style="font-size:13px;color:var(--muted);margin-left:8px">
+        Not connected
+      </div>
+    </div>
+
+    <!-- Editor + Results -->
+    <div class="split-container">
+      <!-- Editor -->
+      <div class="editor-area">
+        <div style="display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--code)">
+          <strong>Query Editor</strong>
+        </div>
+        <div id="editorWrapper" class="editor-wrapper" style="height:260px">
+          <textarea id="sqlEditor">SELECT name FROM sqlite_master WHERE type='table' LIMIT 10;</textarea>
+        </div>
+      </div>
+
+      <!-- Splitter -->
+      <div id="splitter" class="splitter" title="Drag to resize"></div>
+
+      <!-- Results -->
+      <div class="results-area" id="resultsArea">
+        <div class="results-header">
+          <h3 style="margin:0">Results</h3>
+          <div style="flex:1"></div>
+          <button id="copyResults" class="btn secondary" disabled>
+            <i class="fas fa-copy"></i> Copy results
+          </button>
+          <div class="results-controls">
+            <label for="maxCharsInput">Max chars/cell</label>
+            <input id="maxCharsInput" type="number" min="1" value="20"/>
+            <label style="color:var(--muted)">(truncated)</label>
+          </div>
+        </div>
+
+        <div class="results-scroll" id="resultsScroll">
+          <div id="results" style="min-height:60px">
+            <div style="padding:20px;text-align:center;color:var(--muted)">
+              <i class="fas fa-database" style="font-size:24px;opacity:0.4"></i>
+              <p>Run a query to see results</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span id="status">Ready</span>
+      <span id="activeDb">No active DB</span>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file input -->
+<input id="dbFileInput" type="file" accept=".db,.sqlite,.sqlite3" multiple style="display:none">
+
+<!-- Saved queries modal -->
+<div id="savedQueriesModal">
+  <div class="saved-modal-content">
+    <div class="saved-modal-header">
+      <div class="saved-modal-title">Saved queries</div>
+      <button id="closeSavedModal" class="btn secondary btn-small" style="padding:2px 8px;">X</button>
+    </div>
+    <div class="saved-modal-body">
+      <div id="savedQueriesList"></div>
+    </div>
+    <div class="saved-modal-footer">
+      <button id="openSavedQueriesBtn" class="btn">Open selected</button>
+    </div>
+  </div>
+</div>
+
+<!-- CodeMirror & formatter -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/comment/comment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/4.0.2/sql-formatter.min.js"></script>
+
+<script>
+/* ========= Globals ========= */
+let editor, SQLlib;
+let dbs = {};                // name -> SQL.Database
+let dbProtectedTables = {};  // name -> Set(lowercase tableName)
+let activeDbName = null;
+
+let tabs = [];               // runtime tab objects
+let activeTabId = null;
+let suppressEditorChange = false;
+
+let persistentState = null;
+const STORAGE_KEY = 'sqlbrowser.appState.v1';
+
+/* Tab model (runtime):
+{
+  id, title,
+  dbName,
+  queryText,
+  defaultMaxRows,
+  maxCharsPerCell,
+  editorHeight,
+  statusText,
+  lastResults,     // NOT persisted
+  savedId,         // id of saved query, or null
+  dirty,           // boolean
+  savedQueryTextAtSave // string
+}
+*/
+
+/* ========= SQL.js init ========= */
+const sqlConfig = { locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${f}` };
+
+initSqlJs(sqlConfig).then(SQL => {
+  SQLlib = SQL;
+  initApp();
+}).catch(e=>{
+  console.error('sql.js failed to load', e);
+  showError('Failed to load sql.js: ' + (e && e.message ? e.message : e));
+  hideLoadingOverlay();
+});
+
+/* ========= App init ========= */
+async function initApp(){
+  loadPersistentState();
+  restoreDatabasesFromState();
+
+  initEditor();
+  initSplitter();
+  buildInitialTabs();
+  attachHandlers();
+  restoreUiFromState();
+
+  setStatus('Ready (sql.js loaded)');
+
+  if (Object.keys(dbs).length === 0 &&
+      (location.protocol === 'http:' || location.protocol === 'https:')) {
+    await tryLoadFromServer();
+  }
+
+  hideLoadingOverlay();
+}
+
+/* ========= Persistent state helpers ========= */
+function loadPersistentState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw){
+      persistentState = {
+        version:1,
+        databases:{},
+        tabs:[],
+        activeTabId:null,
+        expandColumns:false,
+        savedQueries:[]
+      };
+      return;
+    }
+    const obj = JSON.parse(raw);
+    persistentState = {
+      version:1,
+      databases:obj.databases || {},
+      tabs:obj.tabs || [],
+      activeTabId:obj.activeTabId || null,
+      expandColumns:!!obj.expandColumns,
+      savedQueries:obj.savedQueries || []
+    };
+  }catch(e){
+    console.warn('Failed to parse persistent state', e);
+    persistentState = {
+      version:1,
+      databases:{},
+      tabs:[],
+      activeTabId:null,
+      expandColumns:false,
+      savedQueries:[]
+    };
+  }
+}
+
+function commitPersistentState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistentState));
+  }catch(e){
+    console.warn('Failed to store state', e);
+  }
+}
+
+/* ========= DB persistence ========= */
+function uint8ToBase64(u8){
+  let binary = '';
+  for(let i=0;i<u8.length;i++) binary += String.fromCharCode(u8[i]);
+  return btoa(binary);
+}
+function base64ToUint8(b64){
+  const binary = atob(b64);
+  const len = binary.length;
+  const u8 = new Uint8Array(len);
+  for(let i=0;i<len;i++) u8[i] = binary.charCodeAt(i);
+  return u8;
+}
+
+function restoreDatabasesFromState(){
+  if(!persistentState || !persistentState.databases) return;
+  Object.entries(persistentState.databases).forEach(([name,info])=>{
+    if(!info || !info.data) return;
+    try{
+      const u8 = base64ToUint8(info.data);
+      const db = new SQLlib.Database(u8);
+      dbs[name] = db;
+      const ptables = Array.isArray(info.protectedTables)
+        ? info.protectedTables.map(n=>String(n).toLowerCase())
+        : [];
+      dbProtectedTables[name] = new Set(ptables);
+    }catch(e){
+      console.warn('Failed to restore DB', name, e);
+    }
+  });
+  if(Object.keys(dbs).length>0){
+    rebuildDbUI();
+  }
+}
+
+function persistDatabaseBinary(dbName){
+  if(!persistentState) return;
+  const db = dbs[dbName];
+  if(!db) return;
+  try{
+    const data = db.export();
+    const b64 = uint8ToBase64(data);
+    const pset = dbProtectedTables[dbName] ? Array.from(dbProtectedTables[dbName]) : [];
+    persistentState.databases[dbName] = {
+      data:b64,
+      protectedTables:pset
+    };
+    commitPersistentState();
+  }catch(e){
+    console.warn('Failed to export DB', dbName, e);
+  }
+}
+
+/* ========= Editor ========= */
+function initEditor(){
+  editor = CodeMirror.fromTextArea(document.getElementById('sqlEditor'), {
+    mode:'text/x-sql',
+    theme:'dracula',
+    lineNumbers:true,
+    lineWrapping:true,
+    matchBrackets:true,
+    extraKeys:{
+      'Ctrl-Enter': runQuery,
+      'Cmd-Enter': runQuery,
+      'Shift-Alt-F': formatQuery,
+      'Ctrl-/':'toggleComment'
+    }
+  });
+  const wrapper = document.getElementById('editorWrapper');
+  editor.setSize('100%', wrapper.clientHeight + 'px');
+  setTimeout(()=>editor.refresh(),50);
+
+  editor.on('change', ()=>{
+    if(suppressEditorChange) return;
+    const tab = getActiveTab();
+    if(!tab) return;
+    tab.queryText = editor.getValue();
+    tab.dirty = true;
+    renderTabsBar();
+    persistTabsToState();
+  });
+}
+
+/* ========= Tabs ========= */
+function buildInitialTabs(){
+  if(persistentState.tabs && persistentState.tabs.length){
+    tabs = persistentState.tabs.map(raw=>({
+      id: raw.id || generateTabId(),
+      title: raw.title || 'Query',
+      dbName: raw.dbName || null,
+      queryText: raw.queryText || '',
+      defaultMaxRows: typeof raw.defaultMaxRows==='number' ? raw.defaultMaxRows : null,
+      maxCharsPerCell: typeof raw.maxCharsPerCell==='number' ? raw.maxCharsPerCell : 20,
+      editorHeight: typeof raw.editorHeight==='number' ? raw.editorHeight : null,
+      statusText: raw.statusText || 'Ready',
+      lastResults: null,
+      savedId: raw.savedId || null,
+      dirty: true,
+      savedQueryTextAtSave: ''
+    }));
+    if(!tabs.length){
+      const def = createNewTabObject(true);
+      tabs.push(def);
+    }
+    activeTabId = persistentState.activeTabId && tabs.some(t=>t.id===persistentState.activeTabId)
+      ? persistentState.activeTabId
+      : tabs[0].id;
+  }else{
+    const def = createNewTabObject(true);
+    tabs = [def];
+    activeTabId = def.id;
+  }
+  renderTabsBar();
+  const active = getActiveTab();
+  if(active){
+    applyTabState(active, true);
+  }
+  persistTabsToState();
+}
+
+function generateTabId(){
+  return 'tab_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
+}
+
+function nextQueryBaseName(){
+  // smallest N such that "Query N" not already used among open tabs
+  let n = 1;
+  const titles = new Set(tabs.map(t=>t.title));
+  while(titles.has('Query ' + n)) n++;
+  return 'Query ' + n;
+}
+
+function createNewTabObject(isInitial){
+  const baseName = isInitial ? 'Query 1' : nextQueryBaseName();
+  return {
+    id: generateTabId(),
+    title: baseName,
+    dbName: activeDbName || null,
+    queryText: 'SELECT name FROM sqlite_master WHERE type=\'table\' LIMIT 10;',
+    defaultMaxRows: null,
+    maxCharsPerCell: 20,
+    editorHeight: null,
+    statusText: 'Ready',
+    lastResults: null,
+    savedId: null,
+    dirty: true,
+    savedQueryTextAtSave: ''
+  };
+}
+
+function getActiveTab(){
+  return tabs.find(t=>t.id===activeTabId) || null;
+}
+
+function renderTabsBar(){
+  const left = document.getElementById('tabsLeft');
+  left.innerHTML = '';
+
+  tabs.forEach(tab=>{
+    const el = document.createElement('div');
+    el.className = 'tab' + (tab.id===activeTabId ? ' active':'');
+    el.dataset.tabId = tab.id;
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'tab-title';
+    titleSpan.textContent = tab.title || 'Query';
+    el.appendChild(titleSpan);
+
+    if(tab.dirty){
+      const dot = document.createElement('span');
+      dot.className = 'tab-dirty-dot';
+      el.appendChild(dot);
+    }
+
+    const closeSpan = document.createElement('span');
+    closeSpan.className = 'tab-close';
+    closeSpan.innerHTML = '&times;';
+    closeSpan.title = 'Close tab';
+    closeSpan.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      closeTab(tab.id);
+    });
+    el.appendChild(closeSpan);
+
+    el.addEventListener('click', ()=>{
+      if(tab.id !== activeTabId){
+        setActiveTab(tab.id);
+      }
+    });
+
+    // double-click to rename
+    el.addEventListener('dblclick', ev=>{
+      ev.stopPropagation();
+      const currentName = tab.title || 'Query';
+      const newName = prompt('Rename query', currentName);
+      if(newName === null) return;
+      const trimmed = newName.trim();
+      if(!trimmed) return;
+      tab.title = trimmed;
+      // update saved query name if linked
+      if(persistentState && persistentState.savedQueries && tab.savedId){
+        const s = persistentState.savedQueries.find(q=>q.id===tab.savedId);
+        if(s){
+          s.name = trimmed;
+          s.updatedAt = new Date().toISOString();
+          commitPersistentState();
+        }
+      }
+      renderTabsBar();
+      const active = getActiveTab();
+      if(active && active.id === tab.id){
+        updateQueryNameDisplay(active);
+      }
+      persistTabsToState();
+    });
+
+    left.appendChild(el);
+  });
+}
+
+function captureCurrentTabState(tab){
+  if(!tab) return;
+  const dbSel = document.getElementById('toolbarDatabaseSelect');
+  tab.dbName = dbSel.value || null;
+  tab.queryText = editor ? editor.getValue() : tab.queryText;
+  const defRows = parseInt(document.getElementById('defaultMaxRows').value,10);
+  tab.defaultMaxRows = (!isNaN(defRows) && defRows>0) ? defRows : null;
+  const maxChars = parseInt(document.getElementById('maxCharsInput').value,10);
+  tab.maxCharsPerCell = (!isNaN(maxChars) && maxChars>0) ? maxChars : 20;
+  const wrapper = document.getElementById('editorWrapper');
+  if(wrapper){
+    const h = parseInt(wrapper.style.height,10) || wrapper.getBoundingClientRect().height;
+    tab.editorHeight = h;
+  }
+  tab.statusText = document.getElementById('status').textContent || 'Ready';
+}
+
+function updateQueryNameDisplay(tab){
+  const disp = document.getElementById('queryNameDisplay');
+  const name = tab && tab.title ? tab.title : 'unnamed';
+  disp.textContent = 'Query: ' + name;
+}
+
+function applyTabState(tab, firstLoad){
+  if(!tab) return;
+  // DB selection
+  const toolbarSel = document.getElementById('toolbarDatabaseSelect');
+  const sidebarSel = document.getElementById('databaseSelect');
+  if(tab.dbName && dbs[tab.dbName]){
+    toolbarSel.value = tab.dbName;
+    sidebarSel.value = tab.dbName;
+    switchDatabase(tab.dbName, true);
+  }else{
+    toolbarSel.value = '';
+    sidebarSel.value = '';
+    activeDbName = null;
+    document.getElementById('connectionStatus').textContent = 'Not connected';
+    document.getElementById('connectionStatus').style.color = 'var(--muted)';
+    document.getElementById('activeDb').textContent = 'No active DB';
+  }
+
+  updateQueryNameDisplay(tab);
+
+  // Editor content
+  if(editor){
+    suppressEditorChange = true;
+    editor.setValue(tab.queryText || '');
+    suppressEditorChange = false;
+    if(tab.editorHeight){
+      const wrapper = document.getElementById('editorWrapper');
+      wrapper.style.height = tab.editorHeight + 'px';
+      editor.setSize('100%', tab.editorHeight + 'px');
+      if(!firstLoad) editor.refresh();
+    }
+  }
+
+  // Controls
+  document.getElementById('defaultMaxRows').value = tab.defaultMaxRows || '';
+  document.getElementById('maxCharsInput').value = tab.maxCharsPerCell || 20;
+
+  // Status
+  document.getElementById('status').textContent = tab.statusText || 'Ready';
+
+  // Results
+  if(tab.lastResults){
+    renderResults(tab.lastResults);
+    document.getElementById('copyResults').disabled = false;
+  }else{
+    showEmptyResultsPlaceholder();
+    document.getElementById('copyResults').disabled = true;
+  }
+}
+
+function setActiveTab(tabId){
+  const current = getActiveTab();
+  if(current){
+    captureCurrentTabState(current);
+  }
+  activeTabId = tabId;
+  renderTabsBar();
+  const newTab = getActiveTab();
+  applyTabState(newTab, false);
+  persistTabsToState();
+}
+
+function newTab(){
+  const current = getActiveTab();
+  if(current) captureCurrentTabState(current);
+  const t = createNewTabObject(false);
+  tabs.push(t);
+  activeTabId = t.id;
+  renderTabsBar();
+  applyTabState(t, false);
+  persistTabsToState();
+}
+
+function closeTab(tabId){
+  const tab = tabs.find(t=>t.id===tabId);
+  if(!tab) return;
+
+  if(tabs.length === 1){
+    if(!confirm('Reset this query tab "'+(tab.title || 'Query')+'" to a fresh Query 1?')){
+      return;
+    }
+    // reset last tab to default "Query 1"
+    tab.title = 'Query 1';
+    tab.dbName = activeDbName || null;
+    tab.queryText = 'SELECT name FROM sqlite_master WHERE type=\'table\' LIMIT 10;';
+    tab.defaultMaxRows = null;
+    tab.maxCharsPerCell = 20;
+    tab.editorHeight = null;
+    tab.statusText = 'Ready';
+    tab.lastResults = null;
+    tab.savedId = null;
+    tab.dirty = true;
+    tab.savedQueryTextAtSave = '';
+    applyTabState(tab,false);
+    renderTabsBar();
+    persistTabsToState();
+    return;
+  }
+
+  if(!confirm('Close query tab "'+(tab.title || 'Query')+'"?')){
+    return;
+  }
+
+  const idx = tabs.findIndex(t=>t.id===tabId);
+  if(idx === -1) return;
+  const isActive = (tabId === activeTabId);
+  tabs.splice(idx,1);
+  if(isActive){
+    const newIndex = idx>0 ? idx-1 : 0;
+    activeTabId = tabs[newIndex].id;
+  }
+  renderTabsBar();
+  applyTabState(getActiveTab(), false);
+  persistTabsToState();
+}
+
+function persistTabsToState(){
+  if(!persistentState) return;
+  const active = getActiveTab();
+  if(active) captureCurrentTabState(active);
+  persistentState.tabs = tabs.map(t=>({
+    id:t.id,
+    title:t.title,
+    dbName:t.dbName || null,
+    queryText:t.queryText || '',
+    defaultMaxRows: t.defaultMaxRows || null,
+    maxCharsPerCell: t.maxCharsPerCell || 20,
+    editorHeight: t.editorHeight || null,
+    statusText: t.statusText || 'Ready',
+    savedId: t.savedId || null
+  }));
+  persistentState.activeTabId = activeTabId;
+  commitPersistentState();
+}
+
+/* ========= Saved queries ========= */
+
+function findMostRecentSavedByName(name){
+  if(!persistentState || !persistentState.savedQueries) return null;
+  const list = persistentState.savedQueries.filter(q=>q.name===name);
+  if(!list.length) return null;
+  // pick the most recently updated (fallback to last in array)
+  list.sort((a,b)=>{
+    const ta = a.updatedAt || a.createdAt || '';
+    const tb = b.updatedAt || b.createdAt || '';
+    if(ta>tb) return 1;
+    if(ta<tb) return -1;
+    return 0;
+  });
+  return list[list.length-1];
+}
+
+function generateNumberedName(baseName){
+  if(!persistentState || !persistentState.savedQueries) return baseName + ' (1)';
+  // strip existing "(n)" suffix if present when we compute base
+  let m = baseName.match(/^(.*)\s\((\d+)\)$/);
+  const root = m ? m[1] : baseName;
+  let n = 1;
+  const names = new Set(persistentState.savedQueries.map(q=>q.name));
+  while(names.has(root + ' ('+n+')')) n++;
+  return root + ' ('+n+')';
+}
+
+function saveTabObject(tab, silent){
+  if(!tab || !persistentState) return;
+  if(!persistentState.savedQueries) persistentState.savedQueries = [];
+
+  let name = (tab.title || '').trim() || 'Query';
+  const dbName = tab.dbName || null;
+  const queryText = tab.queryText || '';
+  const defaultMaxRows = tab.defaultMaxRows || null;
+  const maxCharsPerCell = tab.maxCharsPerCell || 20;
+  const now = new Date().toISOString();
+
+  let list = persistentState.savedQueries;
+
+  if(tab.savedId){
+    const existingById = list.find(q=>q.id===tab.savedId);
+    if(existingById){
+      existingById.name = name;
+      existingById.dbName = dbName;
+      existingById.queryText = queryText;
+      existingById.defaultMaxRows = defaultMaxRows;
+      existingById.maxCharsPerCell = maxCharsPerCell;
+      existingById.updatedAt = now;
+    }else{
+      // savedId missing: treat as if no savedId
+      tab.savedId = null;
+    }
+  }
+
+  if(!tab.savedId){
+    // no savedId yet: check if a saved query with same name exists
+    const existingByName = findMostRecentSavedByName(name);
+    if(existingByName){
+      const overwrite = confirm(
+        'A saved query named "'+name+'" already exists.\n\n' +
+        'Yes = overwrite the existing saved query.\n' +
+        'No = save a new copy with a numbered name like "'+name+' (1)".\n\n' +
+        'Click OK for YES, Cancel for NO.'
+      );
+      if(overwrite){
+        // YES -> overwrite
+        existingByName.dbName = dbName;
+        existingByName.queryText = queryText;
+        existingByName.defaultMaxRows = defaultMaxRows;
+        existingByName.maxCharsPerCell = maxCharsPerCell;
+        existingByName.updatedAt = now;
+        tab.savedId = existingByName.id;
+      }else{
+        // NO -> make a numbered variant
+        const newName = generateNumberedName(name);
+        name = newName;
+        const id = 'q_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
+        list.push({
+          id, name:newName, dbName, queryText,
+          defaultMaxRows, maxCharsPerCell,
+          createdAt: now, updatedAt: now
+        });
+        tab.savedId = id;
+        // update tab title + UI name
+        tab.title = newName;
+        updateQueryNameDisplay(tab);
+      }
+    }else{
+      const id = 'q_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
+      list.push({
+        id, name, dbName, queryText,
+        defaultMaxRows, maxCharsPerCell,
+        createdAt: now, updatedAt: now
+      });
+      tab.savedId = id;
+    }
+  }
+
+  // mark clean
+  tab.dirty = false;
+  tab.savedQueryTextAtSave = queryText;
+
+  commitPersistentState();
+  if(!silent){
+    setStatus('Saved query "'+name+'"');
+  }
+}
+
+function saveCurrentQuery(){
+  const tab = getActiveTab();
+  if(!tab){
+    showError('No active tab to save');
+    return;
+  }
+  captureCurrentTabState(tab);
+  saveTabObject(tab,false);
+  renderTabsBar();
+  persistTabsToState();
+}
+
+function saveAllQueries(){
+  if(!tabs.length || !persistentState) return;
+  const active = getActiveTab();
+  if(active) captureCurrentTabState(active);
+
+  let count = 0;
+  tabs.forEach(t=>{
+    saveTabObject(t,true);
+    count++;
+  });
+  renderTabsBar();
+  persistTabsToState();
+  setStatus('Saved '+count+' querie(s)');
+}
+
+function openSavedQueriesModal(){
+  if(!persistentState) return;
+  buildSavedQueriesList();
+  document.getElementById('savedQueriesModal').style.display = 'flex';
+}
+
+function closeSavedQueriesModal(){
+  document.getElementById('savedQueriesModal').style.display = 'none';
+}
+
+function buildSavedQueriesList(){
+  const container = document.getElementById('savedQueriesList');
+  const list = (persistentState && persistentState.savedQueries) ? persistentState.savedQueries : [];
+  if(!list.length){
+    container.innerHTML = '<div style="color:var(--muted);padding:6px">No saved queries yet.</div>';
+    return;
+  }
+  let html = '';
+  list.forEach(q=>{
+    const dbLabel = q.dbName ? q.dbName : '(no DB)';
+    html += `
+      <div class="saved-list-row">
+        <div class="saved-list-main">
+          <input type="checkbox" class="saved-q-checkbox" value="${escapeHtml(q.id)}"/>
+          <div>
+            <div class="saved-list-name">${escapeHtml(q.name || 'Query')}</div>
+            <div class="saved-list-db">${escapeHtml(dbLabel)}</div>
+          </div>
+        </div>
+        <div class="saved-list-actions">
+          <button class="db-icon-btn saved-download-btn" data-id="${escapeHtml(q.id)}" title="Download .sql">
+            <i class="fas fa-download"></i>
+          </button>
+          <button class="db-icon-btn saved-delete-btn" data-id="${escapeHtml(q.id)}" title="Delete saved query">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+
+  // Attach handlers
+  container.querySelectorAll('.saved-delete-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      deleteSavedQuery(id);
+      buildSavedQueriesList();
+    });
+  });
+  container.querySelectorAll('.saved-download-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      downloadSavedQuery(id);
+    });
+  });
+
+  // checkbox change -> highlight
+  container.querySelectorAll('.saved-q-checkbox').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const row = cb.closest('.saved-list-row');
+      if(!row) return;
+      if(cb.checked) row.classList.add('saved-selected');
+      else row.classList.remove('saved-selected');
+    });
+  });
+
+  // row click toggles checkbox (anywhere in row except actions)
+  container.querySelectorAll('.saved-list-row').forEach(row=>{
+    row.addEventListener('click', e=>{
+      if(e.target.closest('.saved-list-actions')) return;
+      const cb = row.querySelector('.saved-q-checkbox');
+      if(!cb) return;
+      cb.checked = !cb.checked;
+      if(cb.checked) row.classList.add('saved-selected');
+      else row.classList.remove('saved-selected');
+    });
+  });
+}
+
+function deleteSavedQuery(id){
+  if(!persistentState || !persistentState.savedQueries) return;
+  const idx = persistentState.savedQueries.findIndex(q=>q.id===id);
+  if(idx === -1) return;
+  const q = persistentState.savedQueries[idx];
+  if(!confirm('Delete saved query "'+(q.name || 'Query')+'"?')){
+    return;
+  }
+  persistentState.savedQueries.splice(idx,1);
+  commitPersistentState();
+  // Clear savedId from tabs that referenced it
+  tabs.forEach(t=>{
+    if(t.savedId === id) t.savedId = null;
+  });
+  persistTabsToState();
+}
+
+function openSelectedSavedQueries(){
+  if(!persistentState || !persistentState.savedQueries) return;
+  const checkboxes = Array.from(document.querySelectorAll('.saved-q-checkbox:checked'));
+  if(!checkboxes.length){
+    closeSavedQueriesModal();
+    return;
+  }
+  const ids = checkboxes.map(cb=>cb.value);
+  const savedMap = {};
+  persistentState.savedQueries.forEach(q=>{ savedMap[q.id] = q; });
+
+  const current = getActiveTab();
+  if(current) captureCurrentTabState(current);
+
+  let firstNewId = null;
+  ids.forEach(id=>{
+    const q = savedMap[id];
+    if(!q) return;
+    const t = {
+      id: generateTabId(),
+      title: q.name || 'Query',
+      dbName: q.dbName || null,
+      queryText: q.queryText || '',
+      defaultMaxRows: q.defaultMaxRows || null,
+      maxCharsPerCell: q.maxCharsPerCell || 20,
+      editorHeight: null,
+      statusText: 'Ready',
+      lastResults: null,
+      savedId: q.id,
+      dirty: false,
+      savedQueryTextAtSave: q.queryText || ''
+    };
+    tabs.push(t);
+    if(!firstNewId) firstNewId = t.id;
+  });
+
+  if(firstNewId){
+    activeTabId = firstNewId;
+    renderTabsBar();
+    applyTabState(getActiveTab(), false);
+    persistTabsToState();
+  }
+  closeSavedQueriesModal();
+}
+
+/* ========= Download ========= */
+function downloadTextAsFile(filename, text){
+  const blob = new Blob([text], {type:'text/sql'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadCurrentQuery(){
+  const tab = getActiveTab();
+  if(!tab){
+    showError('No active tab to download');
+    return;
+  }
+  captureCurrentTabState(tab);
+  const sql = tab.queryText || '';
+  const name = (tab.title || 'query').replace(/[^\w\-]+/g,'_');
+  downloadTextAsFile(name + '.sql', sql);
+}
+
+function downloadSavedQuery(id){
+  if(!persistentState || !persistentState.savedQueries) return;
+  const q = persistentState.savedQueries.find(x=>x.id===id);
+  if(!q) return;
+  const sql = q.queryText || '';
+  const name = (q.name || 'query').replace(/[^\w\-]+/g,'_');
+  downloadTextAsFile(name + '.sql', sql);
+}
+
+/* ========= Handlers ========= */
+function attachHandlers(){
+  document.getElementById('btnPickFiles').addEventListener('click', ()=>{
+    document.getElementById('dbFileInput').click();
+  });
+
+  document.getElementById('dbFileInput').addEventListener('change', e=>{
+    if(e.target.files) loadFiles([...e.target.files]);
+    e.target.value='';
+  });
+
+  document.getElementById('databaseSelect').addEventListener('change', e=>{
+    if(e.target.value) switchDatabase(e.target.value);
+  });
+  document.getElementById('toolbarDatabaseSelect').addEventListener('change', e=>{
+    if(e.target.value){
+      switchDatabase(e.target.value);
+      const tab = getActiveTab();
+      if(tab){
+        tab.dirty = true;
+        renderTabsBar();
+        persistTabsToState();
+      }
+    }
+  });
+
+  document.getElementById('runQuery').addEventListener('click', runQuery);
+  document.getElementById('formatQuery').addEventListener('click', formatQuery);
+  document.getElementById('clearQuery').addEventListener('click', ()=>{
+    const tab = getActiveTab();
+    if(!tab) return;
+    if(!confirm('Clear the current query text and results for "'+(tab.title || 'Query')+'"?')){
+      return;
+    }
+    if(editor){
+      suppressEditorChange = true;
+      editor.setValue('');
+      suppressEditorChange = false;
+    }
+    tab.queryText = '';
+    tab.lastResults = null;
+    tab.dirty = true;
+    showEmptyResultsPlaceholder();
+    document.getElementById('copyResults').disabled = true;
+    tab.statusText = 'Ready';
+    setStatus('Ready');
+    renderTabsBar();
+    persistTabsToState();
+  });
+
+  document.getElementById('saveQuery').addEventListener('click', saveCurrentQuery);
+  document.getElementById('saveAllButton').addEventListener('click', saveAllQueries);
+  document.getElementById('downloadQuery').addEventListener('click', downloadCurrentQuery);
+
+  document.getElementById('maxCharsInput').addEventListener('change', (e)=>{
+    const tab = getActiveTab();
+    if(!tab) return;
+    let v = parseInt(e.target.value,10);
+    if(isNaN(v) || v<1) v = 20;
+    tab.maxCharsPerCell = v;
+    e.target.value = v;
+    if(tab.lastResults) renderResults(tab.lastResults);
+    tab.dirty = true;
+    renderTabsBar();
+    persistTabsToState();
+  });
+
+  document.getElementById('defaultMaxRows').addEventListener('change', (e)=>{
+    const tab = getActiveTab();
+    if(!tab) return;
+    const v = parseInt(e.target.value,10);
+    tab.defaultMaxRows = (!isNaN(v) && v>0) ? v : null;
+    if(isNaN(v) || v<1) e.target.value = '';
+    tab.dirty = true;
+    renderTabsBar();
+    persistTabsToState();
+  });
+
+  document.getElementById('copyResults').addEventListener('click', copyResultsToClipboard);
+
+  document.getElementById('expandColumnsToggle').addEventListener('change', e=>{
+    if(!persistentState) return;
+    persistentState.expandColumns = !!e.target.checked;
+    commitPersistentState();
+  });
+
+  document.getElementById('closeSavedModal').addEventListener('click', closeSavedQueriesModal);
+  document.getElementById('openSavedQueriesBtn').addEventListener('click', openSelectedSavedQueries);
+
+  document.getElementById('newTabButton').addEventListener('click', newTab);
+  document.getElementById('openSavedButton').addEventListener('click', openSavedQueriesModal);
+}
+
+/* ========= Restore UI-wide settings ========= */
+function restoreUiFromState(){
+  if(persistentState){
+    document.getElementById('expandColumnsToggle').checked = !!persistentState.expandColumns;
+  }
+}
+
+/* ========= DB loading & UI ========= */
+async function loadFiles(files){
+  if(!SQLlib){
+    showError('sql.js not ready');
+    return;
+  }
+  setStatus('Loading '+files.length+' file(s)...');
+  let success = 0;
+  for(const f of files){
+    try{
+      const ab = await f.arrayBuffer();
+      const u8 = new Uint8Array(ab);
+      const instance = new SQLlib.Database(u8);
+      dbs[f.name] = instance;
+      if(!dbProtectedTables[f.name]){
+        const tables = getUserTables(instance);
+        dbProtectedTables[f.name] = new Set(tables.map(t=>t.toLowerCase()));
+      }
+      persistDatabaseBinary(f.name);
+      success++;
+    }catch(err){
+      console.error('Failed to load', f.name, err);
+    }
+  }
+  if(success>0){
+    setStatus('Loaded '+success+' file(s)');
+    rebuildDbUI();
+    if(!activeDbName){
+      const names = Object.keys(dbs);
+      if(names.length) switchDatabase(names[0]);
+    }
+  }else{
+    showError('No valid DB files were loaded');
+    setStatus('Load failed');
+  }
+}
+
+function getUserTables(db){
+  try{
+    const res = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+    if(res && res.length && res[0].values.length){
+      return res[0].values.map(r=>r[0]);
+    }
+  }catch(e){
+    console.warn('Error reading tables', e);
+  }
+  return [];
+}
+
+function rebuildDbUI(){
+  const sidebarSel = document.getElementById('databaseSelect');
+  const toolbarSel = document.getElementById('toolbarDatabaseSelect');
+  sidebarSel.innerHTML = '<option value="">Select a database</option>';
+  toolbarSel.innerHTML = '<option value="">(select DB)</option>';
+
+  Object.keys(dbs).sort().forEach(name=>{
+    const o1 = document.createElement('option');
+    o1.value = name;
+    o1.textContent = name;
+    sidebarSel.appendChild(o1);
+
+    const o2 = document.createElement('option');
+    o2.value = name;
+    o2.textContent = name;
+    toolbarSel.appendChild(o2);
+  });
+
+  const container = document.getElementById('tableList');
+  container.innerHTML = '';
+  const names = Object.keys(dbs);
+  if(!names.length){
+    container.innerHTML = '<div style="padding:15px;color:var(--muted)"><i class="fas fa-database"></i> No database loaded</div>';
+    return;
+  }
+
+  names.sort().forEach(dbName=>{
+    const dbRow = document.createElement('div');
+    dbRow.className = 'db-node';
+    dbRow.dataset.db = dbName;
+
+    const left = document.createElement('div');
+    left.className = 'db-left';
+
+    const chev = document.createElement('span');
+    chev.innerHTML = '<i class="fas fa-chevron-down"></i>';
+    const dbIcon = document.createElement('i');
+    dbIcon.className = 'fas fa-database';
+    dbIcon.style.color = 'var(--primary)';
+    const dbNameSpan = document.createElement('div');
+    dbNameSpan.className = 'db-name';
+    dbNameSpan.textContent = dbName;
+
+    left.appendChild(chev);
+    left.appendChild(dbIcon);
+    left.appendChild(dbNameSpan);
+
+    const meta = document.createElement('div');
+    meta.className = 'db-meta';
+
+    const actions = document.createElement('div');
+    actions.className = 'db-row-actions';
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'db-icon-btn';
+    refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+    refreshBtn.title = 'Refresh tables';
+    refreshBtn.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      rebuildDbUI();
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'db-icon-btn';
+    removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    removeBtn.title = 'Remove database';
+    removeBtn.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      removeDatabase(dbName);
+    });
+
+    actions.appendChild(refreshBtn);
+    actions.appendChild(removeBtn);
+
+    dbRow.appendChild(left);
+    dbRow.appendChild(meta);
+    dbRow.appendChild(actions);
+    container.appendChild(dbRow);
+
+    const childWrap = document.createElement('div');
+    childWrap.className = 'tables-children';
+    container.appendChild(childWrap);
+
+    try{
+      const tables = getUserTables(dbs[dbName]);
+      meta.textContent = `${tables.length} table${tables.length!==1?'s':''}`;
+      if(!tables.length){
+        const no = document.createElement('div');
+        no.className = 'no-tables';
+        no.textContent = 'No tables';
+        childWrap.appendChild(no);
+      }else{
+        tables.forEach(tbl=>{
+          const item = document.createElement('div');
+          item.className = 'table-item';
+          item.innerHTML = '<i class="fas fa-table"></i><span>'+tbl+'</span>';
+          item.addEventListener('click', ev=>{
+            ev.stopPropagation();
+            handleTableClick(dbName, tbl);
+          });
+          childWrap.appendChild(item);
+        });
+      }
+    }catch(e){
+      console.error('Error reading tables for', dbName, e);
+      meta.textContent = 'error';
+      const errDiv = document.createElement('div');
+      errDiv.className = 'no-tables';
+      errDiv.textContent = 'Error reading tables';
+      childWrap.appendChild(errDiv);
+    }
+
+    let expanded = true;
+    const toggle = ()=>{
+      expanded = !expanded;
+      childWrap.style.display = expanded ? 'block' : 'none';
+      chev.innerHTML = expanded ? '<i class="fas fa-chevron-down"></i>' : '<i class="fas fa-chevron-right"></i>';
+    };
+    dbRow.addEventListener('click', ()=>{
+      switchDatabase(dbName);
+      toggle();
+    });
+  });
+}
+
+function handleTableClick(dbName, tableName){
+  const tab = getActiveTab();
+  if(!tab) return;
+
+  switchDatabase(dbName);
+  tab.dbName = dbName;
+  tab.dirty = true;
+
+  const expand = !!(persistentState && persistentState.expandColumns);
+  let sql = '';
+
+  if(expand){
+    try{
+      const db = dbs[dbName];
+      const pragma = db.exec('PRAGMA table_info("'+tableName+'")');
+      let cols = [];
+      if(pragma && pragma.length && pragma[0].values.length){
+        cols = pragma[0].values.map(r=>r[1]);
+      }
+      if(cols.length){
+        const lines = cols.map(c=>'    '+c).join(',\n');
+        sql = 'SELECT\n' + lines + '\nFROM ' + tableName + '\nLIMIT 100;';
+      }else{
+        sql = 'SELECT * FROM ' + tableName + ' LIMIT 100;';
+      }
+    }catch(e){
+      console.warn('Failed to read columns for', tableName, e);
+      sql = 'SELECT * FROM ' + tableName + ' LIMIT 100;';
+    }
+  }else{
+    sql = 'SELECT * FROM ' + tableName + ' LIMIT 100;';
+  }
+
+  if(editor){
+    suppressEditorChange = true;
+    editor.setValue(sql);
+    suppressEditorChange = false;
+  }
+  tab.queryText = sql;
+  renderTabsBar();
+  persistTabsToState();
+}
+
+function removeDatabase(dbName){
+  if(!dbs[dbName]) return;
+  if(!confirm('Disconnect and remove database "'+dbName+'"?')){
+    return;
+  }
+  delete dbs[dbName];
+  delete dbProtectedTables[dbName];
+  if(persistentState && persistentState.databases){
+    delete persistentState.databases[dbName];
+    commitPersistentState();
+  }
+
+  if(activeDbName === dbName){
+    activeDbName = null;
+    document.getElementById('connectionStatus').textContent = 'Not connected';
+    document.getElementById('connectionStatus').style.color = 'var(--muted)';
+    document.getElementById('activeDb').textContent = 'No active DB';
+    document.getElementById('databaseSelect').value = '';
+    document.getElementById('toolbarDatabaseSelect').value = '';
+  }
+
+  tabs.forEach(t=>{
+    if(t.dbName === dbName){
+      t.dbName = null;
+      t.dirty = true;
+    }
+  });
+  persistTabsToState();
+  renderTabsBar();
+  rebuildDbUI();
+}
+
+/* ========= Switch DB ========= */
+function switchDatabase(name, fromApply){
+  if(!dbs[name]){
+    showError('DB not available: ' + name);
+    return;
+  }
+  activeDbName = name;
+
+  const conn = document.getElementById('connectionStatus');
+  conn.textContent = 'Connected to: ' + name;
+  conn.style.color = 'var(--success)';
+  document.getElementById('activeDb').textContent = 'Active: ' + name;
+
+  document.getElementById('databaseSelect').value = name;
+  document.getElementById('toolbarDatabaseSelect').value = name;
+
+  document.querySelectorAll('.db-node').forEach(n=>n.style.background='');
+  const el = document.querySelector('.db-node[data-db="'+cssEscape(name)+'"]');
+  if(el) el.style.background = 'rgba(0,0,0,0.05)';
+
+  const tab = getActiveTab();
+  if(tab){
+    tab.dbName = name;
+    if(!fromApply){
+      tab.dirty = true;
+      renderTabsBar();
+      persistTabsToState();
+    }
+  }
+}
+
+/* ========= Read-only enforcement ========= */
+function analyzeStatementsForWrites(sql, dbName){
+  const protectedSet = dbProtectedTables[dbName] || new Set();
+  const stmts = sql.split(/;\s*(?=\S)/).map(s=>s.trim()).filter(Boolean);
+  let hasWrite = false;
+
+  for(const stmt of stmts){
+    const upper = stmt.toUpperCase().trim();
+    if(!upper) continue;
+
+    if(upper.startsWith('SELECT') ||
+       upper.startsWith('WITH') ||
+       upper.startsWith('PRAGMA') ||
+       upper.startsWith('EXPLAIN') ||
+       upper.startsWith('VALUES')){
+      continue;
+    }
+
+    let m;
+    m = stmt.match(/^\s*INSERT\s+INTO\s+([A-Za-z0-9_]+)/i);
+    if(m){
+      hasWrite = true;
+      const t = m[1].toLowerCase();
+      if(protectedSet.has(t)){
+        return {allowed:false,hasWrite:false,error:'Table "'+m[1]+'" is read-only and cannot be modified.'};
+      }
+      continue;
+    }
+
+    m = stmt.match(/^\s*UPDATE\s+([A-Za-z0-9_]+)/i);
+    if(m){
+      hasWrite = true;
+      const t = m[1].toLowerCase();
+      if(protectedSet.has(t)){
+        return {allowed:false,hasWrite:false,error:'Table "'+m[1]+'" is read-only and cannot be modified.'};
+      }
+      continue;
+    }
+
+    m = stmt.match(/^\s*DELETE\s+FROM\s+([A-Za-z0-9_]+)/i);
+    if(m){
+      hasWrite = true;
+      const t = m[1].toLowerCase();
+      if(protectedSet.has(t)){
+        return {allowed:false,hasWrite:false,error:'Table "'+m[1]+'" is read-only and cannot be modified.'};
+      }
+      continue;
+    }
+
+    m = stmt.match(/^\s*REPLACE\s+INTO\s+([A-Za-z0-9_]+)/i);
+    if(m){
+      hasWrite = true;
+      const t = m[1].toLowerCase();
+      if(protectedSet.has(t)){
+        return {allowed:false,hasWrite:false,error:'Table "'+m[1]+'" is read-only and cannot be modified.'};
+      }
+      continue;
+    }
+
+    m = stmt.match(/^\s*ALTER\s+TABLE\s+([A-Za-z0-9_]+)/i);
+    if(m){
+      hasWrite = true;
+      const t = m[1].toLowerCase();
+      if(protectedSet.has(t)){
+        return {allowed:false,hasWrite:false,error:'Table "'+m[1]+'" is read-only and cannot be altered.'};
+      }
+      continue;
+    }
+
+    m = stmt.match(/^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z0-9_]+)/i);
+    if(m){
+      hasWrite = true;
+      const t = m[1].toLowerCase();
+      if(protectedSet.has(t)){
+        return {allowed:false,hasWrite:false,error:'Table "'+m[1]+'" is read-only and cannot be dropped.'};
+      }
+      continue;
+    }
+
+    m = stmt.match(/^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_]+)/i);
+    if(m){
+      hasWrite = true;
+      const t = m[1].toLowerCase();
+      if(protectedSet.has(t)){
+        return {allowed:false,hasWrite:false,error:'Cannot create table "'+m[1]+'" because it is part of the original read-only schema.'};
+      }
+      continue;
+    }
+  }
+
+  return {allowed:true,hasWrite};
+}
+
+/* ========= Helper: determine which SQL to run ========= */
+function getSqlToExecute(){
+  if(!editor) return '';
+
+  const full = editor.getValue();
+  if(!full.trim()) return '';
+
+  // If user has a selection, run only the selection
+  if(editor.somethingSelected()){
+    return editor.getSelection().trim();
+  }
+
+  // Otherwise, run the statement where the cursor is located,
+  // using ";" as delimiter.
+  const cursor = editor.getCursor();
+  const curIndex = editor.indexFromPos(cursor);
+
+  let lastBoundary = 0;
+  let found = null;
+
+  for(let i=0;i<full.length;i++){
+    if(full[i]===';'){
+      const stmtEnd = i+1; // include semicolon
+      if(curIndex <= stmtEnd){
+        found = { start:lastBoundary, end:stmtEnd };
+        break;
+      }
+      lastBoundary = stmtEnd;
+    }
+  }
+
+  if(!found){
+    // No semicolon after cursor: use tail or everything
+    if(curIndex <= lastBoundary){
+      // cursor somehow before lastBoundary: fallback to whole text up to lastBoundary
+      found = { start:0, end:lastBoundary || full.length };
+    }else{
+      found = { start:lastBoundary, end:full.length };
+    }
+  }
+
+  const snippet = full.slice(found.start, found.end).trim();
+  if(snippet) return snippet;
+
+  // Fallback: whole editor
+  return full.trim();
+}
+
+/* ========= Query execution ========= */
+async function runQuery(){
+  if(!editor) return;
+  const raw = getSqlToExecute();
+  const resultsDiv = document.getElementById('results');
+  const errDiv = document.getElementById('loadError');
+  errDiv.style.display='none';
+
+  const tab = getActiveTab();
+  if(!tab){
+    showError('No active tab');
+    return;
+  }
+  if(!raw){
+    showError('Please enter a SQL query');
+    return;
+  }
+  if(!tab.dbName || !dbs[tab.dbName]){
+    showError('No active DB selected');
+    return;
+  }
+
+  const analysis = analyzeStatementsForWrites(raw, tab.dbName);
+  if(!analysis.allowed){
+    showError(analysis.error);
+    setStatus('Blocked: read-only table');
+    return;
+  }
+
+  const defaultMax = (tab.defaultMaxRows && tab.defaultMaxRows>0) ? tab.defaultMaxRows : null;
+  let execQuery = raw;
+
+  const limitRegex = /limit\s+(\d+)\s*;?$/i;
+  const match = raw.match(limitRegex);
+  if(match){
+    const qLimit = parseInt(match[1],10);
+    if(defaultMax){
+      const effective = Math.min(qLimit, defaultMax);
+      execQuery = raw.replace(limitRegex, 'LIMIT '+effective);
+    }
+  }else if(defaultMax){
+    execQuery = raw.replace(/\s*;?$/, ' LIMIT '+defaultMax);
+  }
+
+  setStatus('Executing...');
+  try{
+    const db = dbs[tab.dbName];
+    const t0 = performance.now();
+    const res = db.exec(execQuery);
+    const elapsed = (performance.now()-t0).toFixed(2);
+
+    if(!res || !res.length){
+      resultsDiv.innerHTML = '<div style="padding:20px;color:var(--muted);text-align:center">No results — executed in '+elapsed+'ms</div>';
+      tab.lastResults = null;
+      document.getElementById('copyResults').disabled = true;
+      tab.statusText = 'Executed in '+elapsed+'ms';
+      setStatus('Executed in '+elapsed+'ms');
+      persistTabsToState();
+      if(analysis.hasWrite) persistDatabaseBinary(tab.dbName);
+      return;
+    }
+
+    tab.lastResults = res;
+    renderResults(res);
+    document.getElementById('copyResults').disabled = false;
+    tab.statusText = 'Executed in '+elapsed+'ms';
+    setStatus('Executed in '+elapsed+'ms');
+    persistTabsToState();
+
+    if(analysis.hasWrite){
+      persistDatabaseBinary(tab.dbName);
+      tab.dirty = true;
+      renderTabsBar();
+    }
+  }catch(err){
+    console.error('Query error', err);
+    errDiv.style.display='block';
+    errDiv.textContent = err.message || String(err);
+    tab.statusText = 'Error running query';
+    setStatus('Error running query');
+    persistTabsToState();
+  }
+}
+
+/* ========= Results rendering & copying ========= */
+function showEmptyResultsPlaceholder(){
+  const resDiv = document.getElementById('results');
+  resDiv.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)"><i class="fas fa-database" style="font-size:24px;opacity:0.4"></i><p>Run a query to see results</p></div>';
+}
+
+function renderResults(results){
+  const tab = getActiveTab();
+  const maxChars = tab && tab.maxCharsPerCell ? tab.maxCharsPerCell : 20;
+  const resDiv = document.getElementById('results');
+  const first = results[0];
+  const cols = first.columns || [];
+  const rows = first.values || [];
+
+  if(!rows.length){
+    resDiv.innerHTML = '<div style="padding:20px;color:var(--muted);text-align:center">No rows returned</div>';
+    document.getElementById('copyResults').disabled = true;
+    return;
+  }
+
+  let html = '<table><thead><tr>';
+  html += '<th>#</th>';
+  cols.forEach(c=>{
+    const s = String(c);
+    html += '<th title="'+escapeHtml(s)+'">'+escapeHtml(s)+'</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  rows.forEach((r, idx)=>{
+    html += '<tr>';
+    html += '<td>'+(idx+1)+'</td>';
+    r.forEach(cell=>{
+      let s = (cell===null) ? 'NULL' : String(cell);
+      let full = s;
+      if(s.length > maxChars){
+        s = s.slice(0, Math.max(1,maxChars-1)) + '…';
+      }
+      html += '<td title="'+escapeHtml(full)+'">'+escapeHtml(s)+'</td>';
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  resDiv.innerHTML = html;
+}
+
+function copyResultsToClipboard(){
+  const tab = getActiveTab();
+  if(!tab || !tab.lastResults || !tab.lastResults.length){
+    showError('No results to copy');
+    return;
+  }
+  const first = tab.lastResults[0];
+  const cols = first.columns || [];
+  const rows = first.values || [];
+  if(!rows.length){
+    showError('No rows to copy');
+    return;
+  }
+
+  const lines = [];
+  lines.push(['#', ...cols].map(tsvEscape).join('\t'));
+  rows.forEach((row, idx)=>{
+    const cells = row.map(c => c===null ? 'NULL' : String(c));
+    lines.push([String(idx+1), ...cells].map(tsvEscape).join('\t'));
+  });
+
+  const text = lines.join('\n');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{
+      setStatus('Copied '+rows.length+' row(s) to clipboard');
+    }).catch(err=>{
+      console.error('Clipboard error', err);
+      showError('Copy failed: ' + (err && err.message ? err.message : err));
+    });
+  }else{
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try{
+      document.execCommand('copy');
+      setStatus('Copied '+rows.length+' row(s) to clipboard');
+    }catch(e){
+      showError('Copy not supported in this browser');
+    }
+    document.body.removeChild(textarea);
+  }
+}
+
+/* ========= Format query ========= */
+function formatQuery(){
+  if(!editor) return;
+  try{
+    suppressEditorChange = true;
+    editor.setValue(sqlFormatter.format(editor.getValue(), {
+      language:'sql',
+      indent:'    ',
+      uppercase:true
+    }));
+    suppressEditorChange = false;
+    const tab = getActiveTab();
+    if(tab){
+      tab.queryText = editor.getValue();
+      tab.dirty = true;
+      renderTabsBar();
+      persistTabsToState();
+    }
+  }catch(e){
+    showError('Format error: ' + (e.message || e));
+  }
+}
+
+/* ========= Auto-load from /databases/ ========= */
+async function tryLoadFromServer(){
+  setStatus('Trying /databases/ ...');
+  document.getElementById('loadError').style.display='none';
+  let urls = [];
+
+  try{
+    const r = await fetch('/databases/index.json', {cache:'no-store'});
+    if(r.ok){
+      const list = await r.json();
+      if(Array.isArray(list) && list.length){
+        urls = list.map(n=>'/databases/'+n);
+      }
+    }
+  }catch(e){
+    console.debug('index.json not available', e);
+  }
+
+  if(!urls.length){
+    try{
+      const r2 = await fetch('/databases/', {cache:'no-store'});
+      if(r2.ok){
+        const text = await r2.text();
+        const doc = new DOMParser().parseFromString(text,'text/html');
+        const anchors = Array.from(doc.querySelectorAll('a'))
+          .map(a=>a.getAttribute('href'))
+          .filter(h=>h && /\.(db|sqlite|sqlite3)$/i.test(h));
+        if(anchors.length){
+          urls = anchors.map(h=> new URL(h, location.origin + '/databases/').href);
+        }
+      }
+    }catch(e){
+      console.debug('directory parse failed', e);
+    }
+  }
+
+  if(!urls.length){
+    setStatus('Ready');
+  }else{
+    await loadFromUrls(urls);
+  }
+}
+
+async function loadFromUrls(urls){
+  if(!SQLlib){
+    showError('sql.js not ready');
+    return;
+  }
+  setStatus('Fetching '+urls.length+' DB(s) from server...');
+  let count=0;
+  for(const u of urls){
+    try{
+      const r = await fetch(u);
+      if(!r.ok) continue;
+      const ab = await r.arrayBuffer();
+      const inst = new SQLlib.Database(new Uint8Array(ab));
+      const name = decodeURIComponent((u.split('/').pop()||'db').split('?')[0]);
+      dbs[name] = inst;
+      if(!dbProtectedTables[name]){
+        const tables = getUserTables(inst);
+        dbProtectedTables[name] = new Set(tables.map(t=>t.toLowerCase()));
+      }
+      persistDatabaseBinary(name);
+      count++;
+    }catch(e){
+      console.error('fetch error', e);
+    }
+  }
+  if(count>0){
+    rebuildDbUI();
+    setStatus('Loaded '+count+' db(s)');
+    if(!activeDbName){
+      const names = Object.keys(dbs);
+      if(names.length) switchDatabase(names[0]);
+    }
+  }else{
+    setStatus('Ready');
+  }
+}
+
+/* ========= Splitter ========= */
+function initSplitter(){
+  const splitter = document.getElementById('splitter');
+  const wrapper = document.getElementById('editorWrapper');
+  let dragging=false, startY=0, startH=0;
+
+  const apply = h=>{
+    const min=80, max=window.innerHeight-160;
+    const final=Math.max(min,Math.min(max,h));
+    wrapper.style.height = final+'px';
+    if(editor){
+      editor.setSize('100%', final+'px');
+      editor.refresh();
+    }
+    const tab = getActiveTab();
+    if(tab){
+      tab.editorHeight = final;
+      persistTabsToState();
+    }
+  };
+
+  splitter.addEventListener('mousedown', e=>{
+    dragging=true;
+    startY=e.clientY;
+    startH=wrapper.getBoundingClientRect().height;
+    document.body.style.userSelect='none';
+    document.body.style.cursor='row-resize';
+  });
+  window.addEventListener('mousemove', e=>{
+    if(!dragging) return;
+    apply(startH + (e.clientY - startY));
+  });
+  window.addEventListener('mouseup', ()=>{
+    if(!dragging) return;
+    dragging=false;
+    document.body.style.userSelect='';
+    document.body.style.cursor='';
+  });
+  splitter.addEventListener('dblclick', ()=>apply(300));
+  window.addEventListener('resize', ()=>{
+    const h = parseInt(wrapper.style.height,10) || wrapper.getBoundingClientRect().height;
+    apply(h);
+  });
+}
+
+/* ========= Utils ========= */
+function setStatus(m){
+  document.getElementById('status').textContent = m;
+}
+
+function showError(m){
+  const el=document.getElementById('loadError');
+  el.style.display='block';
+  el.textContent = m;
+  setTimeout(()=>{ el.style.display='none'; },8000);
+}
+
+function hideLoadingOverlay(){
+  const el = document.getElementById('loadingOverlay');
+  if(el) el.style.display = 'none';
+}
+
+function escapeHtml(s){
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
+}
+
+function cssEscape(s){
+  return String(s).replace(/(["'\\#:.?<>+~\[\]*^$=!(),/\\])/g,'\\$1');
+}
+
+function tsvEscape(v){
+  return String(v).replace(/\r?\n/g,' ').replace(/\t/g,' ');
+}
+</script>
+</body>
+</html>
