@@ -12,18 +12,34 @@
 
 <style>
 :root{
-  --bg:#2b2b2b;
-  --sidebar:#252526;
-  --header:#333333;
-  --text:#e0e0e0;
-  --muted:#9aa0a6;
-  --border:#444444;
-  --hover:#3c3f41;
-  --primary:#0078d7;
+  --bg:#0D0D0D;
+  --sidebar:#1A1A1A;
+  --header:#252525;
+  --text:#FFFFFF;
+  --muted:#999999;
+  --border:#333333;
+  --hover:#3A3A3A;
+  --primary:#FF9500;
   --success:#4caf50;
-  --code:#1e1e1e;
-  --tableHead:#323232;
-  --tabInactive:#1d1d1d; /* darker than active/header */
+  --code:#161616;
+  --tableHead:#1F1F1F;
+  --tabInactive:#131313;
+}
+
+/* Light Mode Theme */
+[data-theme="light"]{
+  --bg:#FFFFFF;
+  --sidebar:#F0F0F0;
+  --header:#E8E8E8;
+  --text:#1A1A1A;
+  --muted:#555555;
+  --border:#D4D4D4;
+  --hover:#E0E0E0;
+  --primary:#FF9500;
+  --success:#4caf50;
+  --code:#F8F8F8;
+  --tableHead:#E8E8E8;
+  --tabInactive:#DDD;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -41,7 +57,7 @@ body{
 #loadingOverlay{
   position:fixed;
   inset:0;
-  background:#1e1e1e;
+  background:var(--bg);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -92,7 +108,7 @@ body{
 }
 .btn-full{width:100%}
 .btn.secondary{
-  background:#272727;
+  background:var(--sidebar);
   border:1px solid var(--border);
   color:var(--text);
 }
@@ -265,10 +281,10 @@ body{
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  color:#777777;               /* inactive tab title color */
+  color:var(--muted);
 }
 .tab.active .tab-title{
-  color:#ffffff;               /* active tab title color */
+  color:var(--text);
   font-weight:600;
 }
 .tab-close{
@@ -281,7 +297,7 @@ body{
   width:6px;
   height:6px;
   border-radius:50%;
-  background:#ffffff;
+  background:var(--primary);
   flex-shrink:0;
 }
 
@@ -289,7 +305,8 @@ body{
 .tab-control-btn{
   border-radius:4px;
   border:1px solid var(--border);
-  background:#3a3a3a;
+  background:var(--hover);
+  color:var(--text);
   display:flex;
   align-items:center;
   gap:4px;
@@ -549,6 +566,136 @@ td{font-family:monospace}
   font-size:12px;
 }
 
+/* Light mode overrides for CodeMirror */
+[data-theme="light"] .CodeMirror{
+  background:var(--code)!important;
+  color:var(--text)!important;
+  border-color:var(--border);
+}
+[data-theme="light"] .CodeMirror-gutters{
+  background:var(--bg)!important;
+  border-right:1px solid var(--border);
+}
+[data-theme="light"] .CodeMirror-linenumber{
+  color:var(--muted)!important;
+}
+[data-theme="light"] .CodeMirror-cursor{
+  border-left-color:var(--primary)!important;
+}
+[data-theme="light"] .CodeMirror-selected{
+  background:rgba(255,149,0,0.15)!important;
+}
+[data-theme="light"] .CodeMirror-line::selection,
+[data-theme="light"] .CodeMirror-line > span::selection,
+[data-theme="light"] .CodeMirror-line > span > span::selection{
+  background:rgba(255,149,0,0.15);
+}
+[data-theme="light"] .CodeMirror-line::-moz-selection,
+[data-theme="light"] .CodeMirror-line > span::-moz-selection,
+[data-theme="light"] .CodeMirror-line > span > span::-moz-selection{
+  background:rgba(255,149,0,0.15);
+}
+
+/* Light mode table styling */
+[data-theme="light"] tr:nth-child(even){
+  background:rgba(0,0,0,0.02);
+}
+[data-theme="light"] tr:hover{
+  background:rgba(0,0,0,0.04);
+}
+
+/* Light mode modal styling */
+[data-theme="light"] #savedQueriesModal{
+  background:rgba(0,0,0,0.5);
+}
+
+/* ========= VS Code Dark+ Theme for Dark Mode Editor ========= */
+.CodeMirror{
+  background:#1e1e1e !important;
+  color:#d4d4d4 !important;
+}
+
+.CodeMirror-gutters{
+  background:#1e1e1e !important;
+  border-right:1px solid #3e3e42 !important;
+}
+
+.CodeMirror-linenumber{
+  color:#858585 !important;
+}
+
+.CodeMirror-cursor{
+  border-left-color:#aeafad !important;
+}
+
+/* VS Code Dark+ Syntax Highlighting */
+.cm-keyword { color:#C586C0 !important; } /* Keywords - Purple */
+.cm-atom { color:#4FC1FF !important; } /* Constants - Bright Blue */
+.cm-number { color:#b5cea8 !important; } /* Numbers - Sage Green */
+.cm-def { color:#9CDCFE !important; } /* Variables - Light Blue */
+.cm-variable { color:#9CDCFE !important; } /* Variables */
+.cm-property { color:#9CDCFE !important; } /* Properties */
+.cm-operator { color:#d4d4d4 !important; } /* Operators - Light Gray */
+.cm-comment { color:#6A9955 !important; font-style:italic; } /* Comments - Green */
+.cm-string { color:#CE9178 !important; } /* Strings - Orange-Brown */
+.cm-meta { color:#9CDCFE !important; } /* Meta - Light Blue */
+.cm-qualifier { color:#DCDCAA !important; } /* Function Names - Pale Yellow */
+.cm-builtin { color:#4EC9B0 !important; } /* Types - Teal */
+.cm-bracket { color:#d4d4d4 !important; } /* Brackets */
+.cm-tag { color:#C586C0 !important; } /* Tags */
+.cm-attribute { color:#9CDCFE !important; } /* Attributes */
+
+/* Selection highlight for dark mode */
+.CodeMirror-selected{
+  background:#264F78 !important;
+}
+
+/* ========= VS Code Light+ Theme for Light Mode Editor ========= */
+[data-theme="light"] .CodeMirror{
+  background:#FFFFFF !important;
+  color:#000000 !important;
+}
+
+[data-theme="light"] .CodeMirror-gutters{
+  background:#F3F3F3 !important;
+  border-right:1px solid #D3D3D3 !important;
+}
+
+[data-theme="light"] .CodeMirror-linenumber{
+  color:#757575 !important;
+}
+
+[data-theme="light"] .CodeMirror-cursor{
+  border-left-color:#333333 !important;
+}
+
+/* VS Code Light+ Syntax Highlighting */
+[data-theme="light"] .cm-keyword { color:#AF00DB !important; } /* Keywords - Magenta */
+[data-theme="light"] .cm-atom { color:#0070C1 !important; } /* Constants - Bright Blue */
+[data-theme="light"] .cm-number { color:#098658 !important; } /* Numbers - Green */
+[data-theme="light"] .cm-def { color:#001080 !important; } /* Variables - Dark Blue */
+[data-theme="light"] .cm-variable { color:#001080 !important; } /* Variables */
+[data-theme="light"] .cm-property { color:#001080 !important; } /* Properties */
+[data-theme="light"] .cm-operator { color:#000000 !important; } /* Operators - Black */
+[data-theme="light"] .cm-comment { color:#008000 !important; font-style:italic; } /* Comments - Green */
+[data-theme="light"] .cm-string { color:#a31515 !important; } /* Strings - Dark Red */
+[data-theme="light"] .cm-meta { color:#001080 !important; } /* Meta - Dark Blue */
+[data-theme="light"] .cm-qualifier { color:#795E26 !important; } /* Function Names - Brown */
+[data-theme="light"] .cm-builtin { color:#267f99 !important; } /* Types - Teal */
+[data-theme="light"] .cm-bracket { color:#000000 !important; } /* Brackets */
+[data-theme="light"] .cm-tag { color:#AF00DB !important; } /* Tags */
+[data-theme="light"] .cm-attribute { color:#001080 !important; } /* Attributes */
+
+/* Selection highlight for light mode */
+[data-theme="light"] .CodeMirror-selected{
+  background:#ADD6FF !important;
+}
+
+/* Light mode smooth transitions */
+* {
+  transition:background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
 /* Responsive */
 @media (max-width:800px){
   .sidebar{width:200px}
@@ -604,6 +751,9 @@ td{font-family:monospace}
       <button id="newTabButton" class="btn secondary tab-control-btn">+ New query</button>
       <button id="openSavedButton" class="btn secondary tab-control-btn">Open saved</button>
       <button id="saveAllButton" class="btn secondary tab-control-btn">Save all</button>
+      <button id="themeToggle" class="btn secondary tab-control-btn" title="Toggle dark/light mode">
+        <i class="fas fa-moon"></i>
+      </button>
     </div>
   </div>
 
@@ -754,6 +904,7 @@ initSqlJs(sqlConfig).then(SQL => {
 
 /* ========= App init ========= */
 async function initApp(){
+  initTheme();
   loadPersistentState();
   restoreDatabasesFromState();
 
@@ -1511,11 +1662,42 @@ function downloadSavedQuery(id){
   downloadTextAsFile(name + '.sql', sql);
 }
 
+/* ========= Theme Management ========= */
+const THEME_KEY = 'sqlbrowser.theme.v1';
+
+function initTheme(){
+  const saved = localStorage.getItem(THEME_KEY);
+  const theme = saved || 'dark';
+  applyTheme(theme);
+}
+
+function applyTheme(theme){
+  const html = document.documentElement;
+  if(theme === 'light'){
+    html.setAttribute('data-theme', 'light');
+    const btn = document.getElementById('themeToggle');
+    if(btn) btn.innerHTML = '<i class="fas fa-sun"></i>';
+  }else{
+    html.removeAttribute('data-theme');
+    const btn = document.getElementById('themeToggle');
+    if(btn) btn.innerHTML = '<i class="fas fa-moon"></i>';
+  }
+  localStorage.setItem(THEME_KEY, theme);
+}
+
+function toggleTheme(){
+  const html = document.documentElement;
+  const isLight = html.getAttribute('data-theme') === 'light';
+  applyTheme(isLight ? 'dark' : 'light');
+}
+
 /* ========= Handlers ========= */
 function attachHandlers(){
   document.getElementById('btnPickFiles').addEventListener('click', ()=>{
     document.getElementById('dbFileInput').click();
   });
+
+  document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
   document.getElementById('dbFileInput').addEventListener('change', e=>{
     if(e.target.files) loadFiles([...e.target.files]);
