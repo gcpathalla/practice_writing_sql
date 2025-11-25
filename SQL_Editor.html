@@ -609,6 +609,88 @@ td{font-family:monospace}
   background:rgba(0,0,0,0.5);
 }
 
+/* ========= VS Code Dark+ Theme for Dark Mode Editor ========= */
+.CodeMirror{
+  background:#1e1e1e !important;
+  color:#d4d4d4 !important;
+}
+
+.CodeMirror-gutters{
+  background:#1e1e1e !important;
+  border-right:1px solid #3e3e42 !important;
+}
+
+.CodeMirror-linenumber{
+  color:#858585 !important;
+}
+
+.CodeMirror-cursor{
+  border-left-color:#aeafad !important;
+}
+
+/* VS Code Dark+ Syntax Highlighting */
+.cm-keyword { color:#C586C0 !important; } /* Keywords - Purple */
+.cm-atom { color:#4FC1FF !important; } /* Constants - Bright Blue */
+.cm-number { color:#b5cea8 !important; } /* Numbers - Sage Green */
+.cm-def { color:#9CDCFE !important; } /* Variables - Light Blue */
+.cm-variable { color:#9CDCFE !important; } /* Variables */
+.cm-property { color:#9CDCFE !important; } /* Properties */
+.cm-operator { color:#d4d4d4 !important; } /* Operators - Light Gray */
+.cm-comment { color:#6A9955 !important; font-style:italic; } /* Comments - Green */
+.cm-string { color:#CE9178 !important; } /* Strings - Orange-Brown */
+.cm-meta { color:#9CDCFE !important; } /* Meta - Light Blue */
+.cm-qualifier { color:#DCDCAA !important; } /* Function Names - Pale Yellow */
+.cm-builtin { color:#4EC9B0 !important; } /* Types - Teal */
+.cm-bracket { color:#d4d4d4 !important; } /* Brackets */
+.cm-tag { color:#C586C0 !important; } /* Tags */
+.cm-attribute { color:#9CDCFE !important; } /* Attributes */
+
+/* Selection highlight for dark mode */
+.CodeMirror-selected{
+  background:#264F78 !important;
+}
+
+/* ========= VS Code Light+ Theme for Light Mode Editor ========= */
+[data-theme="light"] .CodeMirror{
+  background:#FFFFFF !important;
+  color:#000000 !important;
+}
+
+[data-theme="light"] .CodeMirror-gutters{
+  background:#F3F3F3 !important;
+  border-right:1px solid #D3D3D3 !important;
+}
+
+[data-theme="light"] .CodeMirror-linenumber{
+  color:#757575 !important;
+}
+
+[data-theme="light"] .CodeMirror-cursor{
+  border-left-color:#333333 !important;
+}
+
+/* VS Code Light+ Syntax Highlighting */
+[data-theme="light"] .cm-keyword { color:#AF00DB !important; } /* Keywords - Magenta */
+[data-theme="light"] .cm-atom { color:#0070C1 !important; } /* Constants - Bright Blue */
+[data-theme="light"] .cm-number { color:#098658 !important; } /* Numbers - Green */
+[data-theme="light"] .cm-def { color:#001080 !important; } /* Variables - Dark Blue */
+[data-theme="light"] .cm-variable { color:#001080 !important; } /* Variables */
+[data-theme="light"] .cm-property { color:#001080 !important; } /* Properties */
+[data-theme="light"] .cm-operator { color:#000000 !important; } /* Operators - Black */
+[data-theme="light"] .cm-comment { color:#008000 !important; font-style:italic; } /* Comments - Green */
+[data-theme="light"] .cm-string { color:#a31515 !important; } /* Strings - Dark Red */
+[data-theme="light"] .cm-meta { color:#001080 !important; } /* Meta - Dark Blue */
+[data-theme="light"] .cm-qualifier { color:#795E26 !important; } /* Function Names - Brown */
+[data-theme="light"] .cm-builtin { color:#267f99 !important; } /* Types - Teal */
+[data-theme="light"] .cm-bracket { color:#000000 !important; } /* Brackets */
+[data-theme="light"] .cm-tag { color:#AF00DB !important; } /* Tags */
+[data-theme="light"] .cm-attribute { color:#001080 !important; } /* Attributes */
+
+/* Selection highlight for light mode */
+[data-theme="light"] .CodeMirror-selected{
+  background:#ADD6FF !important;
+}
+
 /* Light mode smooth transitions */
 * {
   transition:background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
