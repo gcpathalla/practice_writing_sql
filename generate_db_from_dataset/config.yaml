@@ -12,15 +12,15 @@
 
 databases:
   # Superstore Sales Dataset
-  - csv: ../datasets/Sample - Superstore.csv
-    db: ../databases/superstore.db
+  - csv: datasets/Sample - Superstore.csv
+    db: databases/superstore.db
     table: superstore
     # Optional: Uncomment to manually specify index columns
     # index_columns: [customer_id, order_date, region, category]
 
   # HR Employee Dataset
-  - csv: ../datasets/HRDataset_v14.csv
-    db: ../databases/hr_data.db
+  - csv: datasets/HRDataset_v14.csv
+    db: databases/hr_data.db
     table: employees
     # Optional: Uncomment to manually specify index columns
     # index_columns: [empid, deptid, managerid]
