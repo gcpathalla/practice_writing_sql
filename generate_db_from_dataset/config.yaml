@@ -1,0 +1,26 @@
+# Configuration file for CSV to SQLite database generation
+#
+# This file specifies which CSV files to process and where to store the generated databases.
+# All paths are relative to the project root, or you can use absolute paths.
+#
+# Format:
+#   databases:
+#     - csv: path/to/source.csv          # Required: CSV file to process
+#       db: path/to/output.db            # Required: SQLite database file to create
+#       table: table_name                # Required: Name of the table in the database
+#       index_columns: [col1, col2]      # Optional: Columns to create indexes on (auto-detected if omitted)
+
+databases:
+  # Superstore Sales Dataset
+  - csv: datasets/Sample - Superstore.csv
+    db: databases/superstore.db
+    table: superstore
+    # Optional: Uncomment to manually specify index columns
+    # index_columns: [customer_id, order_date, region, category]
+
+  # HR Employee Dataset
+  - csv: datasets/HRDataset_v14.csv
+    db: databases/hr_data.db
+    table: employees
+    # Optional: Uncomment to manually specify index columns
+    # index_columns: [empid, deptid, managerid]

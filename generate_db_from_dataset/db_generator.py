@@ -2,11 +2,24 @@ import sqlite3
 import pandas as pd
 import os
 import re
+import argparse
+import yaml
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 def _clean_column_name(col: str) -> str:
-    """Clean a single column name: strip, lower, replace non-alnum with underscore, collapse underscores."""
+    """
+    Clean a single column name: strip, lower, replace non-alnum with underscore, collapse underscores.
+
+    Handles all special characters including:
+    - Spaces → underscore
+    - Hyphens/dashes → underscore
+    - Parentheses, brackets → removed
+    - Slashes, dots, commas → underscore
+    - Quotes, percent, dollar, hash, ampersand, etc. → underscore
+    - Multiple consecutive special chars → single underscore
+    - Leading/trailing underscores → removed
+    """
     col = str(col).strip().lower()
     # replace any sequence of non-alphanumeric characters with underscore
     col = re.sub(r'[^0-9a-z]+', '_', col)
@@ -182,14 +195,107 @@ def create_db_from_csv(csv_path: str,
         conn.close()
 
 
-if __name__ == "__main__":
-    # Example usage for your two CSVs (paths can be relative or absolute)
-    try:
-        create_db_from_csv("Sample - Superstore.csv")      # will create Sample_-_Superstore.db and table name 'sample_superstore'
-    except Exception as e:
-        print("Superstore import error:", e)
+def process_config_file(config_path: str):
+    """
+    Process a YAML config file containing database generation specifications.
 
-    try:
-        create_db_from_csv("HRDataset_v14.csv")            # will create HRDataset_v14.db
-    except Exception as e:
-        print("HR import error:", e)
+    Config format:
+    databases:
+      - csv: path/to/file.csv
+        db: path/to/output.db
+        table: table_name
+        index_columns: [col1, col2]  # optional
+    """
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    if 'databases' not in config:
+        raise ValueError("Config file must contain 'databases' key")
+
+    databases = config['databases']
+    if not isinstance(databases, list):
+        raise ValueError("'databases' must be a list")
+
+    success_count = 0
+    error_count = 0
+
+    for idx, db_config in enumerate(databases):
+        print(f"\n{'='*80}")
+        print(f"Processing database {idx + 1}/{len(databases)}")
+        print(f"{'='*80}")
+
+        try:
+            csv_path = db_config.get('csv')
+            db_path = db_config.get('db')
+            table_name = db_config.get('table')
+            index_columns = db_config.get('index_columns')
+
+            if not csv_path:
+                raise ValueError(f"Config entry {idx + 1} missing 'csv' field")
+
+            # Create db directory if it doesn't exist
+            if db_path:
+                db_dir = os.path.dirname(db_path)
+                if db_dir and not os.path.exists(db_dir):
+                    os.makedirs(db_dir)
+                    print(f"Created directory: {db_dir}")
+
+            create_db_from_csv(
+                csv_path=csv_path,
+                db_path=db_path,
+                table_name=table_name,
+                index_columns=index_columns
+            )
+            success_count += 1
+
+        except Exception as e:
+            print(f"ERROR processing config entry {idx + 1}: {e}")
+            error_count += 1
+
+    print(f"\n{'='*80}")
+    print(f"Summary: {success_count} successful, {error_count} failed")
+    print(f"{'='*80}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Generate SQLite databases from CSV files with cleaned column names",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Using config file (recommended):
+  python db_generator.py --config config.yaml
+
+  # Direct CSV processing:
+  python db_generator.py --csv datasets/data.csv --db databases/mydata.db --table mytable
+
+Note: When using config file, all CSV paths are relative to the config file location,
+      or you can use absolute paths.
+        """
+    )
+
+    parser.add_argument('--config', '-c', type=str,
+                        help='Path to YAML config file')
+    parser.add_argument('--csv', type=str,
+                        help='Path to CSV file (for direct processing)')
+    parser.add_argument('--db', type=str,
+                        help='Path to output database file')
+    parser.add_argument('--table', type=str,
+                        help='Table name in the database')
+
+    args = parser.parse_args()
+
+    if args.config:
+        # Process config file
+        process_config_file(args.config)
+    elif args.csv:
+        # Direct CSV processing
+        create_db_from_csv(
+            csv_path=args.csv,
+            db_path=args.db,
+            table_name=args.table
+        )
+    else:
+        parser.print_help()
+        print("\nERROR: You must specify either --config or --csv")
+        exit(1)
